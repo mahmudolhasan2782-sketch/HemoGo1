@@ -1,17 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { TRANSFORM_STYLES } from './constants';
 import Logo from './components/Logo';
 import ImageUploader from './components/ImageUploader';
 import StyleCard from './components/StyleCard';
 import Editor from './components/Editor';
 import { generateTransformation } from './services/geminiService';
-import { Wand2, RefreshCw, AlertCircle, Key } from 'lucide-react';
+import { Wand2, RefreshCw, AlertCircle } from 'lucide-react';
 import { EditorState } from './types';
 
 function App() {
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [isCheckingKey, setIsCheckingKey] = useState(true);
-
   const [state, setState] = useState<EditorState>({
     originalImage: null,
     processedImage: null,
@@ -21,32 +18,6 @@ function App() {
     error: null
   });
 
-  // Check for API Key availability (AI Studio flow)
-  useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(hasKey);
-      } else {
-        // In Vercel or other environments, we assume the key is set via Env Vars.
-        // We set true here to allow the UI to render. If the key is missing on server,
-        // the API call will fail gracefully.
-        setHasApiKey(true);
-      }
-      setIsCheckingKey(false);
-    };
-    checkKey();
-  }, []);
-
-  const handleConnectKey = async () => {
-    if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      // Re-check after selection
-      const hasKey = await window.aistudio.hasSelectedApiKey();
-      setHasApiKey(hasKey);
-    }
-  };
-
   const handleImageSelect = (base64: string) => {
     setState(prev => ({ ...prev, originalImage: base64, processedImage: null, selectedStyle: null, error: null }));
   };
@@ -54,30 +25,26 @@ function App() {
   const handleStyleSelect = async (styleId: string) => {
     if (!state.originalImage) return;
 
-    // Create a new GoogleGenAI instance right before making an API call 
-    // to ensure it uses the most up-to-date API key from the dialog if applicable.
-    
     setState(prev => ({ ...prev, selectedStyle: styleId, isProcessing: true, error: null }));
 
     const style = TRANSFORM_STYLES.find(s => s.id === styleId);
     if (!style) return;
 
     try {
+      // Local processing (No API Key required)
       const result = await generateTransformation(state.originalImage, style.promptSuffix);
-      setState(prev => ({ ...prev, processedImage: result, isProcessing: false }));
+      
+      // Simulate a bit of processing time for better UX
+      setTimeout(() => {
+        setState(prev => ({ ...prev, processedImage: result, isProcessing: false }));
+      }, 1500);
+
     } catch (err: any) {
       console.error(err);
-      let errorMessage = "দুঃখিত, ছবিটি প্রসেস করা সম্ভব হয়নি। অনুগ্রহ করে আবার চেষ্টা করুন।";
-      
-      // Provide hint for Vercel deployment if key is missing
-      if (err.message?.includes('API key') || err.message?.includes('403')) {
-        errorMessage = "API Key সেট করা নেই। দয়া করে Vercel Settings-এ API_KEY যুক্ত করুন।";
-      }
-
       setState(prev => ({ 
         ...prev, 
         isProcessing: false, 
-        error: errorMessage
+        error: "দুঃখিত, ছবিটি প্রসেস করা সম্ভব হয়নি। অনুগ্রহ করে আবার চেষ্টা করুন।"
       }));
     }
   };
@@ -92,41 +59,6 @@ function App() {
       error: null
     });
   };
-
-  if (isCheckingKey) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="animate-spin w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full"></div>
-    </div>;
-  }
-
-  // API Key Selection Screen (Only for supported environments like AI Studio)
-  if (!hasApiKey && window.aistudio) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 font-sans">
-        <Logo className="mb-8 scale-150" />
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Key className="w-8 h-8" />
-          </div>
-          <h2 className="text-2xl font-bold mb-4 text-slate-800">API Key প্রয়োজন</h2>
-          <p className="text-slate-600 mb-8">
-            HemoStyle ব্যবহার করতে অনুগ্রহ করে আপনার Gemini API Key কানেক্ট করুন। এটি সম্পূর্ণ নিরাপদ এবং সরাসরি Google এর মাধ্যমে হয়।
-          </p>
-          <button 
-            onClick={handleConnectKey}
-            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-bold hover:shadow-lg hover:scale-[1.02] transition-all"
-          >
-            API Key কানেক্ট করুন
-          </button>
-          <p className="mt-6 text-xs text-slate-400">
-            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="underline hover:text-purple-600">
-              Pricing সম্পর্কে জানুন
-            </a>
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-slate-50">
@@ -185,8 +117,8 @@ function App() {
                   <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-4 mx-auto">
                     <Wand2 className="w-6 h-6" />
                   </div>
-                  <h3 className="font-bold text-lg mb-2">এআই ম্যাজিক</h3>
-                  <p className="text-sm text-slate-500">অটোমেটিক ব্যাকগ্রাউন্ড এবং পোশাক পরিবর্তন</p>
+                  <h3 className="font-bold text-lg mb-2">ফ্রী এডিটর</h3>
+                  <p className="text-sm text-slate-500">সম্পূর্ণ বিনামূল্যে আনলিমিটেড এডিটিং</p>
                </div>
                <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-100">
                   <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center mb-4 mx-auto">
@@ -199,8 +131,8 @@ function App() {
                   <div className="w-12 h-12 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mb-4 mx-auto">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   </div>
-                  <h3 className="font-bold text-lg mb-2">ফেস অবিকৃতি গ্যারান্টি</h3>
-                  <p className="text-sm text-slate-500">আপনার মুখের বৈশিষ্ট্য থাকবে ১০০% অটুট</p>
+                  <h3 className="font-bold text-lg mb-2">১০০% ফ্রি</h3>
+                  <p className="text-sm text-slate-500">কোনো লুকায়িত চার্জ নেই, সব ফিচার উন্মুক্ত</p>
                </div>
             </div>
           </div>
@@ -226,8 +158,8 @@ function App() {
                    <div className="absolute inset-0 border-4 border-t-purple-600 rounded-full animate-spin"></div>
                    <Wand2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-purple-600 w-8 h-8 animate-pulse" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-700 animate-pulse">AI প্রসেসিং চলছে...</h3>
-                <p className="text-slate-500 mt-2">অনুগ্রহ করে অপেক্ষা করুন, ম্যাজিক তৈরি হচ্ছে!</p>
+                <h3 className="text-xl font-bold text-slate-700 animate-pulse">প্রসেসিং চলছে...</h3>
+                <p className="text-slate-500 mt-2">আপনার ছবিটি সাজানো হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন!</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
